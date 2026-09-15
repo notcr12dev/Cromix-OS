@@ -1,5 +1,5 @@
-/* DEV-OS · print.c: VGA + COM1. Todo sale por los dos lados:
- * la serie es el log que ves con `-serial stdio` en QEMU. */
+/* Cronix OS · print.c: VGA + COM1. Everything goes out both
+ * sides: serial is the log you see with `-serial stdio` in QEMU. */
 #include "print.h"
 
 #include "io.h"
@@ -19,7 +19,7 @@ static int serial_ready(void)
 static void serial_putc(char c)
 {
     while (!serial_ready()) {
-        /* espera activa */
+        /* busy-wait */
     }
     outb(COM1, (uint8_t)c);
 }
@@ -57,7 +57,7 @@ void k_putc(char c)
     if (c == '\n') {
         g_col = 0;
         if (++g_row >= VGA_ROWS) {
-            g_row = VGA_ROWS - 1; /* sin scroll: se queda abajo */
+            g_row = VGA_ROWS - 1; /* no scroll: sticks at bottom */
         }
         serial_putc('\r');
         serial_putc('\n');

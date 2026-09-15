@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""DEV-OS · check_env.py — verifica el toolchain en Linux.
+"""Cronix OS - check_env.py: verify the Linux toolchain.
 
-Uso:
+Usage:
     python3 scripts/check_env.py
     make check
 
-Falla (exit 1) si falta algo. No compila nada.
-En Windows/macOS avisa y falla: el proyecto es SOLO-Linux.
+Fails (exit 1) if anything is missing. Compiles nothing.
+Fails on Windows/macOS with a note: this project is Linux-only.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import shutil
 import sys
 
 REQUIRED = ["nasm", "make"]
-# Compilador cruzado: preferimos x86_64-elf-gcc, aceptamos gcc/clang como plan B.
+# C compiler: prefer x86_64-elf-gcc, accept gcc/clang as fallback.
 COMPILERS = ["x86_64-elf-gcc", "gcc", "clang"]
 OPTIONAL = ["qemu-system-x86_64", "ld", "objcopy"]
 
@@ -27,19 +27,19 @@ def check_one(name: str) -> str | None:
 
 
 def main() -> int:
-    print("[check] DEV-OS · x86_64 · solo-Linux")
-    print(f"[check] sistema: {platform.system()} {platform.machine()}")
+    print("[check] Cronix OS - x86_64 - Linux-only")
+    print(f"[check] host: {platform.system()} {platform.machine()}")
 
     if platform.system() != "Linux":
-        print("[check] ERROR: este proyecto SOLO compila en Linux. "
-              "Usa tu entorno Linux.", file=sys.stderr)
+        print("[check] ERROR: this project builds on Linux ONLY. "
+              "Use your Linux environment.", file=sys.stderr)
         return 1
 
     ok = True
     for tool in REQUIRED:
         path = check_one(tool)
         print(f"[check] {'OK  ':>5} {tool} -> {path}" if path
-              else f"[check] FALTA {tool} (sudo apt install {tool})")
+              else f"[check] MISSING {tool} (sudo apt install {tool})")
         ok = ok and bool(path)
 
     found_cc = None
@@ -49,26 +49,26 @@ def main() -> int:
             found_cc = (cc, path)
             break
     if found_cc:
-        print(f"[check] {'OK  ':>5} compilador {found_cc[0]} -> {found_cc[1]}")
+        print(f"[check] {'OK  ':>5} compiler {found_cc[0]} -> {found_cc[1]}")
         if found_cc[0] != "x86_64-elf-gcc":
-            print("[check] AVISO: sin x86_64-elf-gcc usas el gcc del sistema; "
-                  "asegúrate de compilar freestanding (-ffreestanding -m64).")
+            print("[check] WARNING: no x86_64-elf-gcc, using system gcc; "
+                  "make sure to build freestanding (-ffreestanding -m64).")
     else:
-        print("[check] FALTA compilador C (x86_64-elf-gcc o gcc). "
-              "Ej: sudo apt install build-essential nasm qemu-system-x86", file=sys.stderr)
+        print("[check] MISSING C compiler (x86_64-elf-gcc or gcc). "
+              "E.g.: sudo apt install build-essential nasm qemu-system-x86", file=sys.stderr)
         ok = False
 
     for tool in OPTIONAL:
         path = check_one(tool)
-        print(f"[check] {'opcional OK':>12} {tool} -> {path}" if path
-              else f"[check] {'opcional --':>12} {tool} no encontrado (recomendado)")
+        print(f"[check] {'optional OK':>12} {tool} -> {path}" if path
+              else f"[check] {'optional --':>12} {tool} not found (recommended)")
 
-    # Si hay CROSS en el entorno, infórmalo (el Makefile lo usa).
+    # Report CROSS from the environment (the Makefile uses it).
     cross = os.environ.get("CROSS", "")
     if cross:
-        print(f"[check] CROSS='{cross}' (prefijo del Makefile)")
+        print(f"[check] CROSS='{cross}' (Makefile prefix)")
 
-    print("[check] entorno OK" if ok else "[check] entorno INCOMPLETO")
+    print("[check] environment OK" if ok else "[check] environment INCOMPLETE")
     return 0 if ok else 1
 
 

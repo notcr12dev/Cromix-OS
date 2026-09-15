@@ -1,4 +1,4 @@
-# DEV-OS · .gitignore (kernel x86_64, solo-Linux)
+# Cronix OS · .gitignore (x86_64 kernel, Linux-only)
 
 # ── Generados por el Makefile ──
 build/

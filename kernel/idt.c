@@ -1,5 +1,5 @@
-/* DEV-OS · idt.c: 256 puertas, PIC remapeado + enmascarado.
- * Excepciones imprimen nombre y registros en VGA + serie. */
+/* Cronix OS · idt.c: 256 gates, remapped + masked PIC.
+ * Exceptions print name and registers to VGA + serial. */
 #include "idt.h"
 
 #include "io.h"
@@ -85,8 +85,8 @@ static void set_gate(int n, void (*fn)(void))
     g_idt[n].zero = 0;
 }
 
-/* PIC 8259: remapea IRQ0-15 a int 0x20-0x2F y enmascara todo.
- * Sin esto, IRQ0 caería en vector 8 (#Double Fault). */
+/* 8259 PIC: remap IRQ0-15 to int 0x20-0x2F, mask everything.
+ * Without this, IRQ0 lands on vector 8 (#Double Fault). */
 static void pic_remap(void)
 {
     outb(0x20, 0x11);
@@ -105,7 +105,7 @@ static void pic_remap(void)
     io_wait();
     outb(0xA1, 0x01);
     io_wait();
-    outb(0x21, 0xFF); /* máscara total: shell usa polling */
+    outb(0x21, 0xFF); /* full mask: shell polls */
     outb(0xA1, 0xFF);
 }
 
@@ -135,11 +135,11 @@ void idt_init(void)
 void isr_handler(struct isr_frame *f)
 {
     k_color(VGA_LIGHT_RED, VGA_BLACK);
-    k_print("\n*** EXCEPCION CPU ");
+    k_print("\n*** CPU EXCEPTION ");
     if (f->int_no < 32) {
         k_print(EXC_NAMES[f->int_no]);
     } else {
-        k_print("desconocida");
+        k_print("unknown");
     }
     k_print(" ***\n  int=");
     k_print_hex64(f->int_no);
@@ -153,7 +153,7 @@ void isr_handler(struct isr_frame *f)
     k_print_hex64(f->rflags);
     k_print(" rsp=");
     k_print_hex64(f->rsp);
-    k_print("\nSistema detenido.\n");
+    k_print("\nSystem halted.\n");
 
     for (;;) {
         __asm__ volatile("cli; hlt");
@@ -163,7 +163,7 @@ void isr_handler(struct isr_frame *f)
 void irq_handler(struct isr_frame *f)
 {
     if (f->int_no >= 40) {
-        outb(0xA0, 0x20); /* EOI esclavo */
+        outb(0xA0, 0x20); /* slave EOI */
     }
-    outb(0x20, 0x20); /* EOI maestro */
+    outb(0x20, 0x20); /* master EOI */
 }

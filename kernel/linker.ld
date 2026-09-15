@@ -1,8 +1,8 @@
 /* ─────────────────────────────────────────────────────────────
- * DEV-OS · linker script del kernel (ELF64 -> bin plano).
- * Base física: 0x100000 (1 MB). stage2 copia ahí kernel.bin
- * y salta a _start (definido en kernel/entry.asm).
- * Salidas: build/kernel.elf (debug) y build/kernel.bin (plano).
+ * Cronix OS · kernel linker script (ELF64 -> flat binary).
+ * Physical base: 0x100000 (1 MB). stage2 copies kernel.bin
+ * there and jumps to _start (defined in kernel/entry.asm).
+ * Outputs: build/kernel.elf (debug) and build/kernel.bin (flat).
  * ───────────────────────────────────────────────────────────── */
 OUTPUT_FORMAT("elf64-x86-64");
 OUTPUT_ARCH(i386:x86-64);
@@ -31,6 +31,6 @@ SECTIONS
         *(.bss*)
     }
 
-    /* Símbolos útiles para depurar desde Python/QEMU si hace falta. */
+    /* Handy symbols for Python/QEMU debugging. */
     kernel_end = .;
 }

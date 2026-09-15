@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""DEV-OS · build.py — compila todo y guarda el log.
+"""Cronix OS - build.py: build everything, keep the log.
 
-Es lo mismo que `make`, pero garantiza el log aunque invoques
-targets sueltos. Uso (en Linux):
+Same as `make`, but guarantees a log even when invoking
+single targets. Usage (on Linux):
 
     python3 scripts/build.py               # == make
-    python3 scripts/build.py --target qemu # compila y arranca QEMU
-    python3 scripts/build.py --no-log      # sin guardar log
+    python3 scripts/build.py --target qemu # build and boot QEMU
+    python3 scripts/build.py --no-log      # skip saving the log
 
-El log queda en logs/build-YYYYMMDD-HHMMSS.log e incluye
-la salida de `make` + toolchain usada.
+The log lands in logs/build-YYYYMMDD-HHMMSS.log and holds
+the `make` output plus the toolchain in use.
 """
 from __future__ import annotations
 
@@ -25,16 +25,16 @@ LOGS = ROOT / "logs"
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Compila DEV-OS con log")
-    p.add_argument("--target", default="", help="target de make ('' = all)")
-    p.add_argument("--no-log", action="store_true", help="no guardar log")
+    p = argparse.ArgumentParser(description="Build Cronix OS with log")
+    p.add_argument("--target", default="", help="make target ('' = all)")
+    p.add_argument("--no-log", action="store_true", help="do not save log")
     return p.parse_args()
 
 
 def main() -> int:
     a = parse_args()
     if platform.system() != "Linux":
-        print("[build] ERROR: solo se compila en Linux.", file=sys.stderr)
+        print("[build] ERROR: builds on Linux only.", file=sys.stderr)
         return 1
 
     LOGS.mkdir(parents=True, exist_ok=True)
@@ -49,10 +49,10 @@ def main() -> int:
     proc = subprocess.run(cmd, cwd=ROOT, text=True,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     out = proc.stdout or ""
-    # Eco en consola + guardado en log (como `tee`).
+    # Echo to console + save to log (like `tee`).
     sys.stdout.write(out)
     if not a.no_log:
-        header = (f"# DEV-OS build log {stamp}\n# cmd: {' '.join(cmd)}\n"
+        header = (f"# Cronix OS build log {stamp}\n# cmd: {' '.join(cmd)}\n"
                   f"# platform: {platform.platform()}\n\n")
         log_path.write_text(header + out, encoding="utf-8")
         print(f"[build] exit={proc.returncode} log={log_path}")

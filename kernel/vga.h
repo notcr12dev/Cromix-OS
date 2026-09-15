@@ -2,8 +2,8 @@
 #define VGA_H
 
 /* ─────────────────────────────────────────────────────────────
- * DEV-OS · driver mínimo VGA texto 80x25 (modo 3).
- * Escribe directo en 0xB8000. Sin dependencias de libc.
+ * Cronix OS · minimal VGA text driver 80x25 (mode 3).
+ * Writes straight to 0xB8000. No libc dependency.
  * ───────────────────────────────────────────────────────────── */
 #include <stddef.h>
 #include <stdint.h>

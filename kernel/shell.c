@@ -1,6 +1,6 @@
-/* DEV-OS · shell.c: teclado PS/2 por polling + línea de comandos.
- * Set 1 make-codes; shift izq/der; ignora extendidos (0xE0) y releases
- * salvo shift. eco sale por VGA y serie vía print.c. */
+/* Cronix OS · shell.c: PS/2 polling keyboard + command line.
+ * Set-1 make codes; left/right shift; ignores extended (0xE0)
+ * and releases except shift. Echo goes to VGA and serial. */
 #include "shell.h"
 
 #include <stddef.h>
@@ -14,7 +14,7 @@
 #define KBD_DATA 0x60u
 #define LINE_MAX 128
 
-/* Mapa set-1 make -> ASCII (0 = sin tecla imprimible). */
+/* Set-1 make -> ASCII map (0 = no printable key). */
 static const char KMAP[128] = {
     [0x02] = '1', [0x03] = '2', [0x04] = '3', [0x05] = '4',
     [0x06] = '5', [0x07] = '6', [0x08] = '7', [0x09] = '8',
@@ -56,7 +56,7 @@ static int k_eq(const char *a, const char *b)
     return *a == *b;
 }
 
-/* Bloquea hasta scancode listo; devuelve byte crudo. */
+/* Blocks until a scancode is ready; returns the raw byte. */
 static uint8_t kbd_read(void)
 {
     while ((inb(KBD_STATUS) & 0x01) == 0) {
@@ -65,12 +65,12 @@ static uint8_t kbd_read(void)
     return inb(KBD_DATA);
 }
 
-/* Siguiente evento de tecla: -1 = ignorar, '\n' = enter,
- * '\b' = borrar, resto = char listo. */
+/* Next key event: -1 = ignore, '\n' = enter,
+ * '\b' = backspace, rest = ready char. */
 static int kbd_next(int *shift)
 {
     uint8_t c = kbd_read();
-    if (c == 0xE0) { /* extendido: consume siguiente y olvida */
+    if (c == 0xE0) { /* extended: consume next byte, forget it */
         kbd_read();
         return -1;
     }
@@ -82,7 +82,7 @@ static int kbd_next(int *shift)
         *shift = 0;
         return -1;
     }
-    if (c & 0x80) { /* release: ignora */
+    if (c & 0x80) { /* release: ignore */
         return -1;
     }
     if (c == 0x1C) {
@@ -100,13 +100,13 @@ static int kbd_next(int *shift)
 
 static void cmd_help(void)
 {
-    k_print("comandos: help | info | clear | halt | reboot\n");
+    k_print("commands: help | info | clear | halt | reboot\n");
 }
 
 static void cmd_info(void)
 {
-    k_print("Cronix-OS x86_64 | gdt propia | idt 0-31 | pic 0x20/0x28 mask\n");
-    k_print("mem: ident 2MB 0-4MB | kernel @0x100000 | pila 16KB\n");
+    k_print("Cronix OS x86_64 | own gdt | idt 0-31 | pic 0x20/0x28 masked\n");
+    k_print("mem: 2MB ident 0-4MB | kernel @0x100000 | 16KB stack\n");
 }
 
 static void cmd_exec(const char *line)
@@ -126,15 +126,15 @@ static void cmd_exec(const char *line)
             __asm__ volatile("cli; hlt");
         }
     } else if (k_eq(line, "reboot")) {
-        k_print("reboot...\n");
-        outb(0x64, 0xFE); /* pulso reset vía 8042 */
+        k_print("rebooting...\n");
+        outb(0x64, 0xFE); /* reset pulse via 8042 */
         for (;;) {
             __asm__ volatile("cli; hlt");
         }
     } else {
-        k_print("shell: comando '?': ");
+        k_print("shell: unknown command '");
         k_print(line);
-        k_print(" (prueba help)\n");
+        k_print("' (try help)\n");
     }
 }
 
@@ -144,10 +144,10 @@ void shell_run(void)
     size_t len = 0;
     int shift = 0;
 
-    k_print("shell lista. Escribe help + ENTER.\n");
+    k_print("shell ready. Type help + ENTER.\n");
     for (;;) {
         k_color(VGA_LIGHT_GREEN, VGA_BLACK);
-        k_print("cronix-os> ");
+        k_print("cronix> ");
         k_color(VGA_LIGHT_GREY, VGA_BLACK);
         len = 0;
         for (;;) {

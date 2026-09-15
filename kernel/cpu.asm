@@ -1,10 +1,10 @@
 ; ─────────────────────────────────────────────────────────────
-; DEV-OS · cpu.asm (64 bits, ELF64)
-; gdt_flush / idt_load + stubs ISR 0-31 + stubs IRQ 32-255.
-; Vectores con código de error CPU: 8,10,11,12,13,14,17,21,29,30.
-; Resto empuja 0 ficticio. Frame completo en cpu.asm = struct
-; isr_frame en idt.h (mismo orden push).
-; Ensamblar: nasm -f elf64 kernel/cpu.asm -o build/cpu.o
+; Cronix OS · cpu.asm (64-bit, ELF64)
+; gdt_flush / idt_load + ISR stubs 0-31 + IRQ stubs 32-255.
+; Vectors with CPU error code: 8,10,11,12,13,14,17,21,29,30.
+; Rest push a dummy 0. Full frame in cpu.asm = struct
+; isr_frame in idt.h (same push order).
+; Build: nasm -f elf64 kernel/cpu.asm -o build/cpu.o
 ; ─────────────────────────────────────────────────────────────
 BITS 64
 SECTION .text
@@ -14,7 +14,7 @@ GLOBAL idt_load
 EXTERN isr_handler
 EXTERN irq_handler
 
-; void gdt_flush(uint64_t ptr): lgdt + recarga CS vía retfq.
+; void gdt_flush(uint64_t ptr): lgdt + reload CS via retfq.
 gdt_flush:
     lgdt [rdi]
     mov ax, 0x10

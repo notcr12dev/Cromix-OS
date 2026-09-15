@@ -1,9 +1,9 @@
 ; ─────────────────────────────────────────────────────────────
-; DEV-OS · kernel entry (64 bits, ELF64)
-; El bootloader salta a _start (físico 0x100000).
-; Pone una pila propia y llama a kmain(). Si kmain
-; retorna, apaga interrupciones y se queda en hlt.
-; Ensamblar: nasm -f elf64 kernel/entry.asm -o build/entry.o
+; Cronix OS · kernel entry (64-bit, ELF64)
+; Bootloader jumps to _start (physical 0x100000).
+; Sets up its own stack and calls kmain(). If kmain
+; returns, disables interrupts and halts.
+; Build: nasm -f elf64 kernel/entry.asm -o build/entry.o
 ; ─────────────────────────────────────────────────────────────
 BITS 64
 SECTION .text
@@ -12,9 +12,9 @@ EXTERN kmain
 
 _start:
     cli
-    mov rsp, stack_top   ; pila definida abajo (16 KB)
+    mov rsp, stack_top   ; stack defined below (16 KB)
     mov rbp, rsp
-    and rsp, -16         ; alinear a 16 B (ABI System V)
+    and rsp, -16         ; align to 16 B (System V ABI)
     call kmain
 .hang:
     cli

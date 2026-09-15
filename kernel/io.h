@@ -1,7 +1,7 @@
 #ifndef IO_H
 #define IO_H
 
-/* DEV-OS · puertos x86 (inb/outb). Cabecera solo-inline. */
+/* Cronix OS · x86 ports (inb/outb). Inline-only header. */
 #include <stdint.h>
 
 static inline void outb(uint16_t port, uint8_t v)
@@ -18,7 +18,7 @@ static inline uint8_t inb(uint16_t port)
 
 static inline void io_wait(void)
 {
-    outb(0x80, 0); /* puerto libre: pequeña demora */
+    outb(0x80, 0); /* unused port: short delay */
 }
 
 #endif /* IO_H */

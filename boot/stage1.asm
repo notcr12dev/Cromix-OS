@@ -1,18 +1,18 @@
 ; ─────────────────────────────────────────────────────────────
-; DEV-OS · stage1 (MBR)
-; 16 bits, real mode. Cabe en 512 bytes con firma 0xAA55.
-; Hace UNA sola cosa: cargar stage2 (8 sectores, LBA 1..8)
-; en 0x7E00 con BIOS int 0x13 AH=02h y saltar allí.
-; Arquitectura: x86_64 (arranque vía BIOS legacy, QEMU).
-; Ensamblar: nasm -f bin boot/stage1.asm -o build/stage1.bin
+; Cronix OS · stage1 (MBR)
+; 16-bit real mode. Fits in 512 bytes with 0xAA55 signature.
+; Does ONE thing: load stage2 (8 sectors, LBA 1..8) at 0x7E00
+; via BIOS int 0x13 AH=02h, then jump there.
+; Arch: x86_64 (legacy BIOS boot, QEMU).
+; Build: nasm -f bin boot/stage1.asm -o build/stage1.bin
 ; ─────────────────────────────────────────────────────────────
 BITS 16
 ORG 0x7C00
 
 STAGE2_LOAD_SEG EQU 0x0000
 STAGE2_LOAD_OFF EQU 0x7E00
-STAGE2_SECTORS  EQU 8          ; debe coincidir con Makefile/mkimage.py
-STAGE2_START_LBA EQU 1         ; sector LBA 1 == CHS sector 2
+STAGE2_SECTORS  EQU 8          ; must match Makefile/mkimage.py
+STAGE2_START_LBA EQU 1         ; LBA sector 1 == CHS sector 2
 
 start:
     cli
@@ -20,22 +20,22 @@ start:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov sp, 0x7C00             ; pila crece hacia abajo desde 0x7C00
+    mov sp, 0x7C00             ; stack grows down from 0x7C00
     sti
-    mov [boot_drive], dl       ; DL lo pone la BIOS (0x00 floppy / 0x80 HDD)
+    mov [boot_drive], dl       ; BIOS leaves drive in DL (0x00 floppy / 0x80 HDD)
 
     mov si, msg_s1
     call bios_print
 
-    ; --- cargar stage2: ES:BX = 0x0000:0x7E00 ---
+    ; --- load stage2: ES:BX = 0x0000:0x7E00 ---
     mov ax, STAGE2_LOAD_SEG
     mov es, ax
     mov bx, STAGE2_LOAD_OFF
-    mov ah, 0x02               ; leer sectores
+    mov ah, 0x02               ; read sectors
     mov al, STAGE2_SECTORS
-    mov ch, 0                  ; cilindro 0
-    mov cl, STAGE2_START_LBA + 1 ; sector BIOS = LBA+1 (sectores 2..9)
-    mov dh, 0                  ; cabeza 0
+    mov ch, 0                  ; cylinder 0
+    mov cl, STAGE2_START_LBA + 1 ; BIOS sector = LBA+1 (sectors 2..9)
+    mov dh, 0                  ; head 0
     mov dl, [boot_drive]
     int 0x13
     jc disk_error               ; CF=1 -> error
@@ -43,8 +43,8 @@ start:
     mov si, msg_ok
     call bios_print
 
-    mov dl, [boot_drive]        ; recarga: int 0x13 puede tocar DL
-    jmp 0x0000:0x7E00           ; saltar a stage2 (DL = disco de arranque)
+    mov dl, [boot_drive]        ; reload: int 0x13 may clobber DL
+    jmp 0x0000:0x7E00           ; jump to stage2 (DL = boot drive)
 
 disk_error:
     mov si, msg_err
@@ -54,7 +54,7 @@ disk_error:
     hlt
     jmp .hang
 
-; SI -> cadena ASCIIZ. Usa int 0x10 AH=0x0E.
+; SI -> zero-terminated ASCII. Uses int 0x10 AH=0x0E.
 bios_print:
     pusha
 .loop:
@@ -71,7 +71,7 @@ bios_print:
     ret
 
 boot_drive: db 0
-msg_s1: db '[S1] DEV-OS boot', 13, 10, 0
+msg_s1: db '[S1] Cronix OS boot', 13, 10, 0
 msg_ok: db '[S1] stage2 OK', 13, 10, 0
 msg_err: db '[S1] DISK ERROR', 13, 10, 0
 

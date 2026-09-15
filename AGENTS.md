@@ -1,125 +1,125 @@
-# AGENTS.md — DEV-OS (kernel x86_64)
+# AGENTS.md — Cronix OS (x86_64 kernel)
 
-> Este archivo es la **fuente de verdad para agentes** (y para ti cuando
-> pidas cambios). Edítalo con precisión: lo que pongas aquí dirige cómo
-> se escribe código. Idioma del proyecto: **español** en docs y mensajes,
-> **inglés** en identificadores de código.
+> This file is the **source of truth for agents** (and for you when
+> requesting changes). Edit it with care: what you put here drives
+> how code gets written. Project language: **English** everywhere
+> (docs, messages, comments, identifiers).
 
-## 1. Qué es (y qué NO es)
+## 1. What it is (and what it is NOT)
 
-- **Es**: un kernel mínimo de 64 bits para arrancar en QEMU (BIOS legacy)
-  y servir de base a un futuro SO enfocado en desarrollo.
-- **NO es**: un SO completo (sin IDT/GDT propia, sin memoria virtual
-  avanzada, sin scheduler, sin syscalls, sin FS, sin red).
-- Arranque: `stage1 (MBR 512 B)` → `stage2 (loader, 8 sectores)` →
-  `kernel` en `0x100000`, todo en modo **long mode** ya activo.
-- Plataforma: **solo x86_64, solo BIOS legacy, solo Linux para compilar**,
-  ejecución en `qemu-system-x86_64`.
+- **Is**: a minimal 64-bit kernel booting in QEMU (legacy BIOS),
+  base for a future dev-focused OS.
+- **Is NOT**: a full OS (no TSS yet, no advanced VM, no scheduler,
+  no syscalls, no FS, no net).
+- Boot: `stage1 (MBR 512 B)` → `stage2 (loader, 8 sectors)` →
+  `kernel` at `0x100000`, all in active **long mode**.
+- Platform: **x86_64 only, legacy BIOS only, Linux-only builds**,
+  runs on `qemu-system-x86_64`.
 
-## 2. Estructura (no mover sin actualizar Makefile + mkimage.py)
+## 2. Layout (never move without updating Makefile + mkimage.py)
 
 ```text
-Makefile             # solo-Linux; `all` guarda log en logs/
-boot/stage1.asm      # MBR: carga 8 sectores a 0x7E00, jmp. 512 B + AA55
-boot/stage2.asm      # A20, check LM, carga kernel LBA 9→0x10000 (EDD),
-                     # pm32: copia a 0x100000, pagina 2MB 0-4MB, salto a 64b
-kernel/entry.asm     # _start: pila 16KB, call kmain (ELF64)
-kernel/cpu.asm       # gdt_flush, idt_load, stubs ISR 0-31 + IRQ 32-255
-kernel/kernel.c      # kmain: print+gdt+idt+sti, luego shell_run (C11)
-kernel/print.h/.c    # VGA 80x25 + COM1 (eco doble), hex, backspace
+Makefile             # Linux-only; `all` saves a log to logs/
+boot/stage1.asm      # MBR: loads 8 sectors to 0x7E00, jumps. 512 B + AA55
+boot/stage2.asm      # A20, LM check, loads kernel LBA 9→0x10000 (EDD),
+                     # pm32: copy to 0x100000, 2MB paging 0-4MB, jump to 64b
+kernel/entry.asm     # _start: 16KB stack, call kmain (ELF64)
+kernel/cpu.asm       # gdt_flush, idt_load, ISR stubs 0-31 + IRQ 32-255
+kernel/kernel.c      # kmain: print+gdt+idt+sti, then shell_run (C11)
+kernel/print.h/.c    # VGA 80x25 + COM1 (dual echo), hex, backspace
 kernel/io.h          # inb/outb/io_wait inline
-kernel/gdt.h/.c      # GDT propia: null+código+datos, gdt_init
-kernel/idt.h/.c      # IDT 256: 0-31 vuelcan+paran, PIC 0x20/0x28 mask
-kernel/shell.h/.c    # mini-shell PS/2 polling: help info clear halt reboot
-kernel/vga.h         # celdas/colores VGA texto
+kernel/gdt.h/.c      # Own GDT: null+code+data, gdt_init
+kernel/idt.h/.c      # IDT 256: 0-31 dump+halt, PIC 0x20/0x28 masked
+kernel/shell.h/.c    # mini-shell, PS/2 polling: help info clear halt reboot
+kernel/vga.h         # VGA text cells/colors
 kernel/linker.ld     # ENTRY(_start), base 0x100000
-scripts/check_env.py # verifica toolchain (no compila)
-scripts/mkimage.py   # compone build/disk.img (layout LBA fijo)
-scripts/build.py     # `make` con log garantizado en logs/
-scripts/run_qemu.py  # QEMU BIOS con disk.img (+ --debug para gdb)
-build/               # generado (ignorado): *.bin *.o *.elf *.img
-logs/                # generado (versionado parcial): build-*.log
+scripts/check_env.py # toolchain check (builds nothing)
+scripts/mkimage.py   # assembles build/disk.img (fixed LBA layout)
+scripts/build.py     # `make` with guaranteed log in logs/
+scripts/run_qemu.py  # BIOS QEMU with disk.img (+ --debug for gdb)
+build/               # generated (ignored): *.bin *.o *.elf *.img
+logs/                # generated (partly versioned): build-*.log
 ```
 
-**Layout de disco (contrato sagrado)**: LBA 0 = stage1 · LBA 1–8 = stage2
-(4096 B) · LBA 9+ = `kernel.bin`. Si cambias tamaños, toca a la vez:
-`stage1.asm (STAGE2_SECTORS)`, `stage2.asm`, `Makefile`, `mkimage.py`.
+**Disk layout (sacred contract)**: LBA 0 = stage1 · LBA 1–8 = stage2
+(4096 B) · LBA 9+ = `kernel.bin`. Changing sizes means touching at
+once: `stage1.asm (STAGE2_SECTORS)`, `stage2.asm`, `Makefile`, `mkimage.py`.
 
-## 3. Toolchain y comandos (Linux)
+## 3. Toolchain and commands (Linux)
 
-- Requisitos: `nasm`, `x86_64-elf-gcc` (o `gcc` multilib como plan B),
+- Needs: `nasm`, `x86_64-elf-gcc` (or multilib `gcc` as fallback),
   `ld`, `objcopy`, `make`, `python3`, `qemu-system-x86_64`.
-  Ej: `sudo apt install build-essential nasm qemu-system-x86 gdb`.
-- Verificar: `make check` · Compilar: `make` (o `python3 scripts/build.py`).
-- Probar: `make qemu` · Depurar: `make qemu-debug` + `gdb build/kernel.elf`
-  (`target remote :1234`). · Limpiar: `make clean` (respeta `logs/`).
-- **Todo `make` guarda log** en `logs/build-YYYYMMDD-HHMMSS.log` vía `tee`.
-  Adjunta ese log cuando pidas ayuda con un fallo de compilación.
-- Sobrescribir toolchain: `make CC=clang` o `CROSS=x86_64-elf- make`.
-- **Prohibido compilar en Windows/macOS**: el Makefile aborta con error.
-  En este entorno Windows el agente **no compila**: solo escribe código.
+  E.g.: `sudo apt install build-essential nasm qemu-system-x86 gdb`.
+- Check: `make check` · Build: `make` (or `python3 scripts/build.py`).
+- Run: `make qemu` · Debug: `make qemu-debug` + `gdb build/kernel.elf`
+  (`target remote :1234`). · Clean: `make clean` (keeps `logs/`).
+- **Every `make` saves a log** to `logs/build-YYYYMMDD-HHMMSS.log` via `tee`.
+  Attach that log when asking for build help.
+- Override toolchain: `make CC=clang` or `CROSS=x86_64-elf- make`.
+- **No Windows/macOS builds**: the Makefile aborts with an error.
+  In this Windows environment the agent **never builds**: code only.
 
-## 4. Convenciones de código
+## 4. Code conventions
 
-- **C (kernel)**: C11 `freestanding`, sin libc (`-ffreestanding`,
-  `-fno-builtin`, `-mno-red-zone`, `-mno-sse`). Nada de `#include <stdio.h>`
-  ni `malloc` salvo que lo implementes tú. Funciones pequeñas, `static`
-  por defecto, comentarios `/* */` solo donde el porqué no sea obvio.
-  `-Wall -Wextra -Werror`: compila sin warnings o no compila.
-- **ASM (boot)**: NASM, etiquetas minúsculas, constantes `%define`/`EQU`
-  arriba, cada bloque con comentario de qué modo CPU usa
-  (`16 real / 32 protegido / 64 long`). stage1 ≤ 512 B con `times`+`AA55`;
-  stage2 = exactamente 4096 B (`times 4096-($-$$)`).
-- **Python (scripts)**: `python3`, `argparse`, funciones `main() -> int`,
-  mensajes `[tag] texto`, errores a `stderr` con `exit != 0`. Sin
-  dependencias externas (solo stdlib) para que funcionen en cualquier Linux.
-- Commits: mensajes cortos en español, ej: `kernel: imprime banner en serie`.
+- **C (kernel)**: C11 `freestanding`, no libc (`-ffreestanding`,
+  `-fno-builtin`, `-mno-red-zone`, `-mno-sse`). No `#include <stdio.h>`
+  or `malloc` unless you implement it yourself. Small functions, `static`
+  by default, `/* */` comments only where the why is not obvious.
+  `-Wall -Wextra -Werror`: zero warnings or no build.
+- **ASM (boot)**: NASM, lowercase labels, `%define`/`EQU` constants
+  on top, each block tagged with its CPU mode
+  (`16 real / 32 protected / 64 long`). stage1 ≤ 512 B with `times`+`AA55`;
+  stage2 = exactly 4096 B (`times 4096-($-$$)`).
+- **Python (scripts)**: `python3`, `argparse`, `main() -> int`,
+  `[tag] text` messages, errors to `stderr` with `exit != 0`. No
+  third-party deps (stdlib only) so they run on any Linux.
+- Commits: short English messages, e.g. `kernel: print banner on serial`.
 
-## 5. Definición de "hecho" (DoD)
+## 5. Definition of done (DoD)
 
-Un cambio está hecho solo si: `make` termina en 0 en Linux, `make qemu`
-muestra el banner `DEV-OS kernel x86_64 ... OK` en VGA y serie, no hay
-warnings nuevos, el log queda en `logs/`, y `mkimage.py` no protesta del
-layout (firma AA55, tamaños LBA).
+Done means: `make` exits 0 on Linux, `make qemu` shows the
+`Cronix OS kernel x86_64 ... OK` banner on VGA and serial, no new
+warnings, the log sits in `logs/`, and `mkimage.py` accepts the
+layout (AA55 signature, LBA sizes).
 
-## 6. Si QEMU se cierra solo (sin error)
+## 6. If QEMU exits on its own (no error)
 
-Casi seguro es un **triple-fault** (p. ej. paginación mal activada,
-`CR3` sin cargar, GDT rota). Diagnóstico por descarte:
+Almost surely a **triple-fault** (e.g. paging enabled wrong,
+`CR3` never loaded, broken GDT). Triage:
 
-1. Mira la **serie** (`-serial stdio`): el último `[S..]` impreso dice
-   hasta dónde llegó (`[S1]` → stage1, `[S2] ...` → stage2).
-2. Mira la **esquina superior izquierda del VGA**: `3` = se entró en
-   32 bits, `6` = se entró en 64 bits. Si no hay ni `3`, el fallo está
-   en modo real (disco/A20/CPUID); si hay `3` pero no `6`, en paginación.
-3. `run_qemu.py` **no** pasa `-no-reboot` por defecto a propósito: un
-   fallo se ve como reinicio en bucle, no como cierre mudo. Solo usa
-   `--no-reboot` si lo pides.
-4. Depuración fina: `make qemu-debug` + `gdb build/kernel.elf`
+1. Watch **serial** (`-serial stdio`): the last `[S..]` line tells
+   how far it got (`[S1]` → stage1, `[S2] ...` → stage2).
+2. Watch the **top-left VGA corner**: `3` = 32-bit reached,
+   `6` = 64-bit reached. No `3` means real-mode failure
+   (disk/A20/CPUID); `3` without `6` means paging failure.
+3. `run_qemu.py` passes **no** `-no-reboot` by default on purpose: a
+   fault shows as a reboot loop, not a silent exit. Use
+   `--no-reboot` only when asked.
+4. Fine debug: `make qemu-debug` + `gdb build/kernel.elf`
    (`target remote :1234`, `continue`, `info registers`).
 
-## 7. Cómo pedirme cambios (plantilla — cópiala y rellena)
+## 7. How to request changes (template — copy and fill in)
 
 ```text
-Objetivo: [ej: añadir IDT con excepciones 0-31 que impriman en VGA]
-Alcance: [solo kernel/ | solo boot/ | scripts | Makefile]
-Restricciones: [ej: no usar GRUB, máx X líneas, sin libc]
-Verificación: [ej: `make qemu` debe mostrar "..." en serie]
-No hacer: [ej: no tocar stage1, no añadir dependencias pip]
+Goal: [e.g. add IDT with exceptions 0-31 printing to VGA]
+Scope: [kernel/ only | boot/ only | scripts | Makefile]
+Constraints: [e.g. no GRUB, max X lines, no libc]
+Check: [e.g. `make qemu` must show "..." on serial]
+Do not: [e.g. do not touch stage1, no new pip deps]
 ```
 
-Sé específico en **dónde** (archivo/función), **qué debe pasar en QEMU** y
-**qué está prohibido**. Sin esos tres datos, preguntaré antes de codificar.
+State **where** (file/function), **what QEMU must show**, and
+**what is forbidden**. Without those three, ask before coding.
 
-## 8. Roadmap (uno por vez)
+## 8. Roadmap (one at a time)
 
-1. `IDT + ISR 0-31` con volcado en VGA/serie — HECHO (polling, sin IRQ).
-2. `GDT` propia — HECHO (null+código+datos; falta `TSS`).
-3. Shell propia — HECHO (polling PS/2; falta IRQ1 + scroll).
-4. `PMM` (bitmap sobre `memmap` pasada por stage2) + `kheap`.
-5. `reloj/PIT` + teclado por IRQ.
-6. `syscalls` + `ring3` + `ELF` básico.
+1. `IDT + ISR 0-31` with VGA/serial dump — DONE (polling, no IRQ).
+2. Own `GDT` — DONE (null+code+data; `TSS` missing).
+3. Own shell — DONE (PS/2 polling; IRQ1 + scroll missing).
+4. `PMM` (bitmap over `memmap` from stage2) + `kheap`.
+5. `PIT` clock + IRQ keyboard.
+6. `syscalls` + `ring3` + basic `ELF`.
 
 ---
-*Última revisión: 2026-09-15. Si cambias el layout de arranque, actualiza
-este archivo EL MISMO commit.*
+*Last review: 2026-09-15. Changing the boot layout means updating
+this file IN THE SAME commit.*
