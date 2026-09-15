@@ -12,5 +12,6 @@ void k_putc(char c);               /* one char to VGA + serial */
 void k_print(const char *s);
 void k_backspace(void);            /* erase last visible char */
 void k_print_hex64(uint64_t v);    /* 0x0123ABCDEF... format */
+void k_setcursor(uint8_t col, uint8_t row); /* hardware text cursor */
 
 #endif /* PRINT_H */

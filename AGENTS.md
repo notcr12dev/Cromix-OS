@@ -30,11 +30,21 @@ kernel/print.h/.c    # VGA 80x25 + COM1 (dual echo), hex, backspace
 kernel/io.h          # inb/outb/io_wait inline
 kernel/gdt.h/.c      # Own GDT: null+code+data, gdt_init
 kernel/idt.h/.c      # IDT 256: 0-31 dump+halt, PIC 0x20/0x28 masked
-kernel/shell.h/.c    # mini-shell, PS/2 polling: help info clear halt reboot
+kernel/shell.h/.c    # mini-shell, PS/2 polling: ls cat edit rm mkdir
+kernel/heap.h/.c     # kmalloc/kfree, 4MB pool at 0x400000
+kernel/ata.h/.c      # ATA PIO LBA28 polling (QEMU HDD)
+kernel/fat.h/.c      # FAT16 rw, 8.3, FS at fixed LBA 2048
+kernel/vfs.h/.c      # paths /bin /sys /home, depth 1, no users
+kernel/edit.h/.c     # nano-style editor: arrows, ^O save, ^X quit
+kernel/pci.h/.c      # PCI config space (0xCF8/0xCFC), find, BAR, master
+kernel/e1000.h/.c    # Intel 8086:100E polling, RX/TX rings, MMIO map
+kernel/net.h/.c      # ARP + IPv4 + TCP client + DNS (SLIRP static cfg)
+kernel/wget.h/.c     # HTTP/1.0 GET, saves body to FAT (no HTTPS)
 kernel/vga.h         # VGA text cells/colors
 kernel/linker.ld     # ENTRY(_start), base 0x100000
 scripts/check_env.py # toolchain check (builds nothing)
 scripts/mkimage.py   # assembles build/disk.img (fixed LBA layout)
+scripts/mkfs.py      # formats 16MB FAT16 + /bin /sys /home (`make fs`)
 scripts/build.py     # `make` with guaranteed log in logs/
 scripts/run_qemu.py  # BIOS QEMU with disk.img (+ --debug for gdb)
 build/               # generated (ignored): *.bin *.o *.elf *.img
@@ -42,8 +52,10 @@ logs/                # generated (partly versioned): build-*.log
 ```
 
 **Disk layout (sacred contract)**: LBA 0 = stage1 · LBA 1–8 = stage2
-(4096 B) · LBA 9+ = `kernel.bin`. Changing sizes means touching at
-once: `stage1.asm (STAGE2_SECTORS)`, `stage2.asm`, `Makefile`, `mkimage.py`.
+(4096 B) · LBA 9+ = `kernel.bin` · LBA 2048+ = FAT16 volume, 16 MB
+(dirs `/bin /sys /home`). Changing sizes means touching at
+once: `stage1.asm (STAGE2_SECTORS)`, `stage2.asm`, `Makefile`,
+`mkimage.py`, `mkfs.py`, `fat.h (FS_LBA)`.
 
 ## 3. Toolchain and commands (Linux)
 
@@ -116,9 +128,14 @@ State **where** (file/function), **what QEMU must show**, and
 1. `IDT + ISR 0-31` with VGA/serial dump — DONE (polling, no IRQ).
 2. Own `GDT` — DONE (null+code+data; `TSS` missing).
 3. Own shell — DONE (PS/2 polling; IRQ1 + scroll missing).
-4. `PMM` (bitmap over `memmap` from stage2) + `kheap`.
-5. `PIT` clock + IRQ keyboard.
-6. `syscalls` + `ring3` + basic `ELF`.
+4. Storage: `heap` + `ATA PIO` + `FAT16 rw` + `VFS` + `edit` — DONE.
+   No real `nano` binary (in-kernel clone instead).
+5. Net: `PCI` + `e1000` polling + `ARP/IP/TCP/DNS` + `wget` HTTP — DONE.
+   QEMU user networking (SLIRP) only, static 10.0.2.15/24. No HTTPS,
+   no DHCP, one TCP socket, polling. `ping` missing (no ICMP TX).
+6. `PMM` (bitmap over `memmap` from stage2) + grow `kheap` past 4MB.
+7. `PIT` clock + IRQ keyboard.
+8. `syscalls` + `ring3` + basic `ELF`.
 
 ---
 *Last review: 2026-09-15. Changing the boot layout means updating

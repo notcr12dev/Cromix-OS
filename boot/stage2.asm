@@ -6,7 +6,7 @@
 ;   2. Check CPUID + Long Mode (0x80000001:EDX bit 29)
 ;   3. Load kernel (LBA 9, KERNEL_SECTORS) at 0x10000 via int13 EDD
 ;   4. 32-bit protected mode -> copy kernel 0x10000 -> 0x100000
-;   5. Identity paging 0-4MB (2MB pages), EFER.LME, CR0.PG
+;   5. Identity paging 0-16MB (2MB pages), EFER.LME, CR0.PG
 ;   6. Far jump to 64-bit, jmp to 0x100000 (kernel entry)
 ;
 ; Disk layout (see scripts/mkimage.py):
@@ -227,10 +227,16 @@ pm32_entry:
     mov eax, PD_ADDR
     or eax, 0x03
     mov [PDPT_ADDR], eax
-    ; PD[0] = 0x00000083 (2MB, P+RW+PS) -> covers 0-2MB
-    mov dword [PD_ADDR], 0x00000083
-    ; PD[1] = 0x20000083 -> covers 2-4MB (kernel at 0x100000 ok)
-    mov dword [PD_ADDR + 8], 0x20000083
+    ; PD: 8 x 2MB entries -> identity map 0-16MB.
+    ; Kernel heap lives at 4-8MB, so it must be mapped here.
+    mov edi, PD_ADDR
+    mov eax, 0x00000083        ; 2MB, P+RW+PS
+    mov ecx, 8
+.pd_fill:
+    mov [edi], eax
+    add eax, 0x200000
+    add edi, 8
+    loop .pd_fill
 
     ; CR3 -> PML4. MANDATORY: without it, enabling PG translates
     ; through whatever tables the BIOS left -> triple fault,

@@ -51,9 +51,17 @@ STAGE2_SRC := $(BOOT_DIR)/stage2.asm
 ENTRY_SRC  := $(KERNEL_DIR)/entry.asm
 CPU_SRC    := $(KERNEL_DIR)/cpu.asm
 KERNEL_SRCS := $(KERNEL_DIR)/kernel.c $(KERNEL_DIR)/print.c \
-               $(KERNEL_DIR)/gdt.c $(KERNEL_DIR)/idt.c $(KERNEL_DIR)/shell.c
+               $(KERNEL_DIR)/gdt.c $(KERNEL_DIR)/idt.c $(KERNEL_DIR)/shell.c \
+               $(KERNEL_DIR)/heap.c $(KERNEL_DIR)/ata.c $(KERNEL_DIR)/fat.c \
+               $(KERNEL_DIR)/vfs.c $(KERNEL_DIR)/edit.c \
+               $(KERNEL_DIR)/pci.c $(KERNEL_DIR)/e1000.c \
+               $(KERNEL_DIR)/net.c $(KERNEL_DIR)/wget.c
 KERNEL_HDRS := $(KERNEL_DIR)/vga.h $(KERNEL_DIR)/io.h $(KERNEL_DIR)/print.h \
-               $(KERNEL_DIR)/gdt.h $(KERNEL_DIR)/idt.h $(KERNEL_DIR)/shell.h
+               $(KERNEL_DIR)/gdt.h $(KERNEL_DIR)/idt.h $(KERNEL_DIR)/shell.h \
+               $(KERNEL_DIR)/heap.h $(KERNEL_DIR)/ata.h $(KERNEL_DIR)/fat.h \
+               $(KERNEL_DIR)/vfs.h $(KERNEL_DIR)/edit.h \
+               $(KERNEL_DIR)/pci.h $(KERNEL_DIR)/e1000.h \
+               $(KERNEL_DIR)/net.h $(KERNEL_DIR)/wget.h
 LINKER     := $(KERNEL_DIR)/linker.ld
 
 STAGE1_BIN := $(BUILD)/stage1.bin
@@ -61,12 +69,19 @@ STAGE2_BIN := $(BUILD)/stage2.bin
 ENTRY_O    := $(BUILD)/entry.o
 CPU_O      := $(BUILD)/cpu.o
 KERNEL_OBJS := $(BUILD)/kernel.o $(BUILD)/print.o $(BUILD)/gdt.o \
-               $(BUILD)/idt.o $(BUILD)/shell.o
+               $(BUILD)/idt.o $(BUILD)/shell.o $(BUILD)/heap.o \
+               $(BUILD)/ata.o $(BUILD)/fat.o $(BUILD)/vfs.o \
+               $(BUILD)/edit.o $(BUILD)/pci.o $(BUILD)/e1000.o \
+               $(BUILD)/net.o $(BUILD)/wget.o
 KERNEL_ELF := $(BUILD)/kernel.elf
 KERNEL_BIN := $(BUILD)/kernel.bin
 DISK_IMG   := $(BUILD)/disk.img
 BUILD_STAMP := $(BUILD)/.stamp
 
+# FAT16 volume: fixed LBA + size (kernel/fat.h FS_LBA must match).
+FS_LBA := 2048
+FS_MB  := 16
+IMG_MB := 20
 # stage2 is a fixed 8 sectors; kernel starts at LBA 9.
 STAGE2_SECTORS := 8
 KERNEL_LBA     := 9
@@ -74,7 +89,7 @@ KERNEL_LBA     := 9
 # Timestamped log (created by the `all` target).
 LOG_FILE := $(LOGS)/build-$(shell date +%Y%m%d-%H%M%S).log
 
-.PHONY: all build image qemu qemu-debug check clean clean-logs log sizes help
+.PHONY: all build image qemu qemu-debug check clean clean-logs log sizes help fs
 
 # `all` wraps `build` with tee → everything lands in the log.
 # Runs: make build 2>&1 | tee logs/build-....log
@@ -122,17 +137,27 @@ $(STAGE2_BIN): $(STAGE2_SRC) $(KERNEL_BIN) | $(BUILD_STAMP)
 	$(NASM) $(NASMFLAGS_BIN) $< -o $@ \
 	  -DKERNEL_SECTORS=$$SECTORS -DKERNEL_LBA=$(KERNEL_LBA)
 
-# ── disk image (built by scripts/mkimage.py) ───────────────────
-$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $(SCRIPT_DIR)/mkimage.py
+# ── disk image (built by scripts/mkimage.py, formatted by mkfs.py)
+# NOTE: formatting wipes the FS region, so files saved in QEMU
+# do NOT survive a rebuild. Back them up via serial if needed.
+$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $(SCRIPT_DIR)/mkimage.py $(SCRIPT_DIR)/mkfs.py
 	@echo "[img] $@"
 	$(PYTHON) $(SCRIPT_DIR)/mkimage.py \
 	  --stage1 $(STAGE1_BIN) --stage2 $(STAGE2_BIN) \
 	  --kernel $(KERNEL_BIN) --output $@ \
-	  --stage2-sectors $(STAGE2_SECTORS) --kernel-lba $(KERNEL_LBA)
+	  --stage2-sectors $(STAGE2_SECTORS) --kernel-lba $(KERNEL_LBA) \
+	  --size-mb $(IMG_MB)
+	$(PYTHON) $(SCRIPT_DIR)/mkfs.py --image $@ \
+	  --lba $(FS_LBA) --size-mb $(FS_MB)
 
 # ── helpers ─────────────────────────────────────────────────────
 check:
 	$(PYTHON) $(SCRIPT_DIR)/check_env.py
+
+# Reformat the FAT16 volume of an existing image (wipes files).
+fs:
+	$(PYTHON) $(SCRIPT_DIR)/mkfs.py --image $(DISK_IMG) \
+	  --lba $(FS_LBA) --size-mb $(FS_MB)
 
 qemu: build
 	$(PYTHON) $(SCRIPT_DIR)/run_qemu.py --image $(DISK_IMG)

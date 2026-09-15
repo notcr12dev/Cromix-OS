@@ -106,3 +106,12 @@ void k_print_hex64(uint64_t v)
         k_putc(HEX[(v >> i) & 0xF]);
     }
 }
+
+void k_setcursor(uint8_t col, uint8_t row)
+{
+    uint16_t pos = (uint16_t)(row * VGA_COLS + col);
+    outb(0x3D4, 0x0F);
+    outb(0x3D5, (uint8_t)(pos & 0xFF));
+    outb(0x3D4, 0x0E);
+    outb(0x3D5, (uint8_t)((pos >> 8) & 0xFF));
+}

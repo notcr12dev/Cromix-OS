@@ -9,6 +9,9 @@
 #include "io.h"
 #include "print.h"
 #include "vga.h"
+#include "vfs.h"
+#include "edit.h"
+#include "wget.h"
 
 #define KBD_STATUS 0x64u
 #define KBD_DATA 0x60u
@@ -100,13 +103,38 @@ static int kbd_next(int *shift)
 
 static void cmd_help(void)
 {
-    k_print("commands: help | info | clear | halt | reboot\n");
+    k_print("commands:\n");
+    k_print("  help info clear halt reboot\n");
+    k_print("  ls [/bin|/sys|/home]  cat /home/f  edit /home/f\n");
+    k_print("  rm /home/f  mkdir /games  wget URL /home/f\n");
+}
+
+/* Split "cmd arg..." -> arg points past spaces ("" if none). */
+static const char *cmd_arg(const char *line)
+{
+    while (*line != '\0' && *line != ' ') {
+        line++;
+    }
+    while (*line == ' ') {
+        line++;
+    }
+    return line;
+}
+
+static int cmd_starts(const char *line, const char *cmd)
+{
+    while (*cmd != '\0') {
+        if (*line++ != *cmd++) {
+            return 0;
+        }
+    }
+    return *line == '\0' || *line == ' ';
 }
 
 static void cmd_info(void)
 {
     k_print("Cronix OS x86_64 | own gdt | idt 0-31 | pic 0x20/0x28 masked\n");
-    k_print("mem: 2MB ident 0-4MB | kernel @0x100000 | 16KB stack\n");
+    k_print("mem: 2MB ident 0-16MB | kernel @0x100000 | heap 4MB @0x400000\n");
 }
 
 static void cmd_exec(const char *line)
@@ -116,6 +144,35 @@ static void cmd_exec(const char *line)
     }
     if (k_eq(line, "help")) {
         cmd_help();
+    } else if (cmd_starts(line, "ls")) {
+        const char *a = cmd_arg(line);
+        vfs_ls(a[0] == '\0' ? "/" : a);
+    } else if (cmd_starts(line, "cat")) {
+        vfs_cat(cmd_arg(line));
+    } else if (cmd_starts(line, "edit")) {
+        const char *a = cmd_arg(line);
+        if (*a == '\0') {
+            k_print("edit: usage: edit /home/file.txt\n");
+        } else {
+            edit_file(a);
+        }
+    } else if (cmd_starts(line, "rm")) {
+        vfs_rm(cmd_arg(line));
+    } else if (cmd_starts(line, "mkdir")) {
+        vfs_mkdir(cmd_arg(line));
+    } else if (cmd_starts(line, "wget")) {
+        const char *a = cmd_arg(line);
+        const char *sp = a;
+        char url[128];
+        int ui = 0;
+        while (*sp != '\0' && *sp != ' ' && ui < 127) {
+            url[ui++] = *sp++;
+        }
+        url[ui] = '\0';
+        while (*sp == ' ') {
+            sp++;
+        }
+        wget_run(url, sp);
     } else if (k_eq(line, "info")) {
         cmd_info();
     } else if (k_eq(line, "clear")) {
