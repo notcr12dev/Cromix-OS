@@ -24,7 +24,13 @@ boot/stage1.asm      # MBR: carga 8 sectores a 0x7E00, jmp. 512 B + AA55
 boot/stage2.asm      # A20, check LM, carga kernel LBA 9→0x10000 (EDD),
                      # pm32: copia a 0x100000, pagina 2MB 0-4MB, salto a 64b
 kernel/entry.asm     # _start: pila 16KB, call kmain (ELF64)
-kernel/kernel.c      # kmain: VGA 80x25 + COM1, hlt (freestanding C11)
+kernel/cpu.asm       # gdt_flush, idt_load, stubs ISR 0-31 + IRQ 32-255
+kernel/kernel.c      # kmain: print+gdt+idt+sti, luego shell_run (C11)
+kernel/print.h/.c    # VGA 80x25 + COM1 (eco doble), hex, backspace
+kernel/io.h          # inb/outb/io_wait inline
+kernel/gdt.h/.c      # GDT propia: null+código+datos, gdt_init
+kernel/idt.h/.c      # IDT 256: 0-31 vuelcan+paran, PIC 0x20/0x28 mask
+kernel/shell.h/.c    # mini-shell PS/2 polling: help info clear halt reboot
 kernel/vga.h         # celdas/colores VGA texto
 kernel/linker.ld     # ENTRY(_start), base 0x100000
 scripts/check_env.py # verifica toolchain (no compila)
@@ -105,13 +111,14 @@ No hacer: [ej: no tocar stage1, no añadir dependencias pip]
 Sé específico en **dónde** (archivo/función), **qué debe pasar en QEMU** y
 **qué está prohibido**. Sin esos tres datos, preguntaré antes de codificar.
 
-## 8. Roadmap sugerido (elige uno por vez)
+## 8. Roadmap (uno por vez)
 
-1. `IDT + ISR 0-31` con volcado de registros en VGA/serie.
-2. `GDT` propia + `TSS` mínima.
-3. `PMM` (bitmap sobre `memmap` pasada por stage2) + `kheap`.
-4. `reloj/PIT` + `teclado PS/2` → mini-shell en serie.
-5. `syscalls` + ` ring3` + `ELF` básico.
+1. `IDT + ISR 0-31` con volcado en VGA/serie — HECHO (polling, sin IRQ).
+2. `GDT` propia — HECHO (null+código+datos; falta `TSS`).
+3. Shell propia — HECHO (polling PS/2; falta IRQ1 + scroll).
+4. `PMM` (bitmap sobre `memmap` pasada por stage2) + `kheap`.
+5. `reloj/PIT` + teclado por IRQ.
+6. `syscalls` + `ring3` + `ELF` básico.
 
 ---
 *Última revisión: 2026-09-15. Si cambias el layout de arranque, actualiza

@@ -49,16 +49,23 @@ LOGS       := logs
 STAGE1_SRC := $(BOOT_DIR)/stage1.asm
 STAGE2_SRC := $(BOOT_DIR)/stage2.asm
 ENTRY_SRC  := $(KERNEL_DIR)/entry.asm
-KERNEL_SRC := $(KERNEL_DIR)/kernel.c
+CPU_SRC    := $(KERNEL_DIR)/cpu.asm
+KERNEL_SRCS := $(KERNEL_DIR)/kernel.c $(KERNEL_DIR)/print.c \
+               $(KERNEL_DIR)/gdt.c $(KERNEL_DIR)/idt.c $(KERNEL_DIR)/shell.c
+KERNEL_HDRS := $(KERNEL_DIR)/vga.h $(KERNEL_DIR)/io.h $(KERNEL_DIR)/print.h \
+               $(KERNEL_DIR)/gdt.h $(KERNEL_DIR)/idt.h $(KERNEL_DIR)/shell.h
 LINKER     := $(KERNEL_DIR)/linker.ld
 
 STAGE1_BIN := $(BUILD)/stage1.bin
 STAGE2_BIN := $(BUILD)/stage2.bin
 ENTRY_O    := $(BUILD)/entry.o
-KERNEL_O   := $(BUILD)/kernel.o
+CPU_O      := $(BUILD)/cpu.o
+KERNEL_OBJS := $(BUILD)/kernel.o $(BUILD)/print.o $(BUILD)/gdt.o \
+               $(BUILD)/idt.o $(BUILD)/shell.o
 KERNEL_ELF := $(BUILD)/kernel.elf
 KERNEL_BIN := $(BUILD)/kernel.bin
 DISK_IMG   := $(BUILD)/disk.img
+BUILD_STAMP := $(BUILD)/.stamp
 
 # stage2 ocupa 8 sectores fijos; el kernel empieza en LBA 9.
 STAGE2_SECTORS := 8
@@ -81,22 +88,26 @@ build: $(DISK_IMG)
 	@$(MAKE) --no-print-directory sizes
 
 # ── stage1 (512 B, firma AA55; nasm la pone) ──────────────────
-$(STAGE1_BIN): $(STAGE1_SRC) | $(BUILD)
+$(STAGE1_BIN): $(STAGE1_SRC) | $(BUILD_STAMP)
 	@echo "[asm] stage1 $< -> $@"
 	$(NASM) $(NASMFLAGS_BIN) $< -o $@
 
 # ── kernel ELF + bin plano ────────────────────────────────────
-$(ENTRY_O): $(ENTRY_SRC) | $(BUILD)
+$(ENTRY_O): $(ENTRY_SRC) | $(BUILD_STAMP)
 	@echo "[asm] entry $< -> $@"
 	$(NASM) $(NASMFLAGS_ELF) $< -o $@
 
-$(KERNEL_O): $(KERNEL_SRC) $(KERNEL_DIR)/vga.h | $(BUILD)
-	@echo "[cc] kernel $< -> $@"
+$(CPU_O): $(CPU_SRC) | $(BUILD_STAMP)
+	@echo "[asm] cpu $< -> $@"
+	$(NASM) $(NASMFLAGS_ELF) $< -o $@
+
+$(BUILD)/%.o: $(KERNEL_DIR)/%.c $(KERNEL_HDRS) | $(BUILD_STAMP)
+	@echo "[cc] $< -> $@"
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(KERNEL_ELF): $(ENTRY_O) $(KERNEL_O) $(LINKER)
+$(KERNEL_ELF): $(ENTRY_O) $(CPU_O) $(KERNEL_OBJS) $(LINKER)
 	@echo "[ld] $@"
-	$(LD) $(LDFLAGS) -T $(LINKER) $(ENTRY_O) $(KERNEL_O) -o $@
+	$(LD) $(LDFLAGS) -T $(LINKER) $(ENTRY_O) $(CPU_O) $(KERNEL_OBJS) -o $@
 
 $(KERNEL_BIN): $(KERNEL_ELF)
 	@echo "[objcopy] $@"
@@ -104,7 +115,7 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 
 # ── stage2 (necesita saber cuántos sectores ocupa el kernel) ──
 # Se calcula post-kernel: ceil(size(kernel.bin)/512).
-$(STAGE2_BIN): $(STAGE2_SRC) $(KERNEL_BIN) | $(BUILD)
+$(STAGE2_BIN): $(STAGE2_SRC) $(KERNEL_BIN) | $(BUILD_STAMP)
 	@echo "[asm] stage2 (KERNEL_SECTORS auto) -> $@"
 	@SECTORS=$$(( ( $$(stat -c%s $(KERNEL_BIN)) + 511 ) / 512 )); \
 	echo "      kernel: $$(stat -c%s $(KERNEL_BIN)) bytes = $$SECTORS sector(es)"; \
@@ -150,5 +161,12 @@ clean-logs:
 help:
 	@echo "Targets: all build image qemu qemu-debug check clean log sizes help"
 
-$(BUILD) $(LOGS):
+# Sello: crea build/ y logs/ una vez. Existe porque el target
+# `build` ya ocupa ese nombre (si fuese `$(BUILD):` habría
+# dependencia circular y reglas anuladas).
+$(BUILD_STAMP):
+	mkdir -p $(BUILD) $(LOGS)
+	touch $@
+
+$(LOGS):
 	mkdir -p $@
