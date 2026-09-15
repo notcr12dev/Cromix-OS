@@ -1,0 +1,36 @@
+# DEV-OS · .gitignore (kernel x86_64, solo-Linux)
+
+# ── Generados por el Makefile ──
+build/
+*.o
+*.elf
+*.bin
+*.img
+*.iso
+
+# ── Logs de compilación (se crean con `make` / scripts/build.py) ──
+# Se ignora todo menos el .gitkeep del directorio.
+logs/build-*.log
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# ── Editores / IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Debug / tooling ──
+*.d
+compile_commands.json
+.cache/
+.gdb_history
+
